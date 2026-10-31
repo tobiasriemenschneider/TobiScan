@@ -89,11 +89,17 @@ struct ScanSettings: Codable, Equatable {
     static let resolutions = [150, 200, 300, 600]
 
     /// Die Schalter im aufklappbaren Bereich „Nachbearbeitung & PDF“.
-    static let postProcessingOptions: [KeyPath<ScanSettings, Bool>] = [
-        \.skipBlankPages, \.deskew, \.lightenBackground, \.detectMultifeed, \.scannerButton, \.ocr, \.suggestFilename,
+    static let postProcessingOptions: [(title: String, keyPath: WritableKeyPath<ScanSettings, Bool>)] = [
+        ("Leere Seiten entfernen", \.skipBlankPages),
+        ("Schräglage korrigieren", \.deskew),
+        ("Hintergrund aufhellen", \.lightenBackground),
+        ("Doppeleinzug erkennen", \.detectMultifeed),
+        ("Scan-Taste am Gerät", \.scannerButton),
+        ("Durchsuchbar (Texterkennung)", \.ocr),
+        ("Dateinamen vorschlagen (KI)", \.suggestFilename),
     ]
     var activePostProcessingCount: Int {
-        Self.postProcessingOptions.filter { self[keyPath: $0] }.count
+        Self.postProcessingOptions.filter { self[keyPath: $0.keyPath] }.count
     }
     private static let defaultsKey = "scanSettings"
 

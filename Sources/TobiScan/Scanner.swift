@@ -11,6 +11,14 @@ struct ScanDevice: Identifiable, Hashable {
         let name = "\(vendor) \(model)".trimmingCharacters(in: .whitespaces)
         return name.isEmpty ? id : name
     }
+
+    var isTestDevice: Bool { id.hasPrefix("test:") }
+
+    /// Art der Verbindung für Statuszeile und Scannerliste.
+    var connection: String {
+        if isTestDevice { return "Testgerät" }
+        return isWifi ? "WLAN" : "USB"
+    }
 }
 
 /// Die Optionen, die ein Gerät laut `scanimage -A` tatsächlich anbietet.

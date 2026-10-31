@@ -47,7 +47,7 @@ private struct SettingsPanel: View {
         VStack(alignment: .leading, spacing: 0) {
             Form {
                 Section("Scanner") {
-                    ScannerCard(hint: deviceHint)
+                    ScannerCard()
                 }
 
                 Section("Scan") {
@@ -76,13 +76,9 @@ private struct SettingsPanel: View {
 
                 Section {
                     DisclosureGroup(isExpanded: postProcessingExpanded.projectedValue) {
-                        Toggle("Leere Seiten entfernen", isOn: $model.settings.skipBlankPages)
-                        Toggle("Schräglage korrigieren", isOn: $model.settings.deskew)
-                        Toggle("Hintergrund aufhellen", isOn: $model.settings.lightenBackground)
-                        Toggle("Doppeleinzug erkennen", isOn: $model.settings.detectMultifeed)
-                        Toggle("Scan-Taste am Gerät", isOn: $model.settings.scannerButton)
-                        Toggle("Durchsuchbar (Texterkennung)", isOn: $model.settings.ocr)
-                        Toggle("Dateinamen vorschlagen (KI)", isOn: $model.settings.suggestFilename)
+                        ForEach(ScanSettings.postProcessingOptions, id: \.title) { option in
+                            Toggle(option.title, isOn: $model.settings[dynamicMember: option.keyPath])
+                        }
                     } label: {
                         VStack(alignment: .leading, spacing: 1) {
                             Text("Nachbearbeitung & PDF")
@@ -99,9 +95,11 @@ private struct SettingsPanel: View {
             Divider()
             VStack(spacing: 6) {
                 scanButton
-                Text(scanHint)
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
+                if model.activity != .scanning {
+                    Text(scanHint)
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                }
             }
             .padding(16)
         }
@@ -144,25 +142,14 @@ private struct SettingsPanel: View {
     private var scanHint: String {
         model.settings.scannerButton && model.selectedDevice?.isWifi == true ? "⌘R · oder Scan-Taste am Gerät" : "⌘R"
     }
-
-    private var deviceHint: String? {
-        guard model.devices.isEmpty, model.activity != .searching else { return nil }
-        if model.toolMissing {
-            return "Kein Scanner im WLAN gefunden. Für USB fehlt SANE: im Terminal „brew install sane-backends“ ausführen."
-        }
-        if model.scanSnapHomeIsRunning {
-            return "ScanSnap Home läuft noch und blockiert den Scanner. Bitte ganz beenden (auch das Symbol in der Menüleiste) und neu suchen."
-        }
-        return "Den iX500 einschalten (Klappe öffnen), ins WLAN bringen oder per USB anschließen und neu suchen."
-    }
 }
 
 private struct ScannerCard: View {
     @EnvironmentObject private var model: AppModel
-    let hint: String?
 
     private var device: ScanDevice? { model.selectedDevice }
     private var searching: Bool { model.activity == .searching }
+    private var nothingFound: Bool { model.devices.isEmpty && !searching }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -179,7 +166,7 @@ private struct ScannerCard: View {
                         .foregroundStyle(device == nil ? .secondary : .primary)
                         .lineLimit(1)
                         .minimumScaleFactor(0.8)
-                        .help(device?.displayName ?? "")
+                        .help(title)
                     HStack(spacing: 5) {
                         if searching {
                             ProgressView().controlSize(.mini)
@@ -196,48 +183,61 @@ private struct ScannerCard: View {
                 }
                 .accessibilityElement(children: .combine)
                 Spacer(minLength: 0)
-                if hint == nil {
-                    Button {
-                        Task { await model.refreshDevices() }
-                    } label: {
+                if !nothingFound {
+                    refreshButton {
                         Image(systemName: "arrow.clockwise")
                     }
                     .buttonStyle(.borderless)
                     .help("Scanner neu suchen")
                     .accessibilityLabel("Scanner neu suchen")
-                    .disabled(model.isBusy)
                 }
             }
 
             if model.devices.count > 1 {
                 Picker("Scanner", selection: $model.selectedDeviceID) {
                     ForEach(model.devices) { device in
-                        Text(device.displayName).tag(String?.some(device.id))
+                        Text("\(device.displayName) (\(device.connection))").tag(String?.some(device.id))
                     }
                 }
                 .labelsHidden()
                 .disabled(model.isBusy)
             }
 
-            if let hint {
+            if nothingFound {
                 Text(hint)
                     .font(.callout)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
-                Button {
-                    Task { await model.refreshDevices() }
-                } label: {
+                refreshButton {
                     Label("Neu suchen", systemImage: "arrow.clockwise")
                         .frame(maxWidth: .infinity)
                 }
-                .disabled(model.isBusy)
             }
         }
         .padding(.vertical, 2)
     }
 
+    private func refreshButton<Content: View>(@ViewBuilder label: () -> Content) -> some View {
+        Button {
+            Task { await model.refreshDevices() }
+        } label: {
+            label()
+        }
+        .disabled(model.isBusy)
+    }
+
+    private var hint: String {
+        if model.toolMissing {
+            return "Kein Scanner im WLAN gefunden. Für USB fehlt SANE: im Terminal „brew install sane-backends“ ausführen."
+        }
+        if model.scanSnapHomeIsRunning {
+            return "ScanSnap Home läuft noch und blockiert den Scanner. Bitte ganz beenden (auch das Symbol in der Menüleiste) und neu suchen."
+        }
+        return "Den iX500 einschalten (Klappe öffnen), ins WLAN bringen oder per USB anschließen und neu suchen."
+    }
+
     private var title: String {
-        if let device { return device.shortName }
+        if let device { return device.displayName }
         return searching ? "Suche Scanner …" : "Kein Scanner"
     }
 
@@ -250,20 +250,6 @@ private struct ScannerCard: View {
         default: state = "Bereit"
         }
         return "\(device.connection) · \(state)"
-    }
-}
-
-private extension ScanDevice {
-    var isTestDevice: Bool { id.hasPrefix("test:") }
-
-    /// Name ohne den Zusatz „(WLAN)“, den die Verbindungszeile schon zeigt.
-    var shortName: String {
-        isWifi ? displayName.replacingOccurrences(of: " (WLAN)", with: "") : displayName
-    }
-
-    var connection: String {
-        if isTestDevice { return "Testgerät" }
-        return isWifi ? "WLAN" : "USB"
     }
 }
 

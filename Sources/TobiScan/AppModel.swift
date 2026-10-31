@@ -109,11 +109,11 @@ final class AppModel: ObservableObject {
         let wifi = await wifiSearch
         wifiScanners = Dictionary(uniqueKeysWithValues: wifi.map { ("wifi:" + $0.addressString, $0) })
         found += wifi.map {
-            ScanDevice(id: "wifi:" + $0.addressString, vendor: "", model: "\($0.name) (WLAN)", isWifi: true)
+            ScanDevice(id: "wifi:" + $0.addressString, vendor: "", model: $0.name, isWifi: true)
         }
         devices = found
         if selectedDevice == nil {
-            selectedDeviceID = (devices.first { !$0.id.hasPrefix("test:") } ?? devices.first)?.id
+            selectedDeviceID = (devices.first { !$0.isTestDevice } ?? devices.first)?.id
         }
         updateStandby()
         status = devices.isEmpty ? "Kein Scanner gefunden" : "Bereit"
