@@ -73,10 +73,11 @@ private struct SettingsPanel: View {
                         ForEach(PaperSize.allCases) { Text($0.title).tag($0) }
                     }
                 }
+                .disabled(isScanning)
 
                 Section {
                     if postProcessingExpanded.wrappedValue {
-                        ForEach(ScanSettings.postProcessingOptions, id: \.title) { option in
+                        ForEach(ScanSettings.postProcessingOptions) { option in
                             Toggle(isOn: $model.settings[dynamicMember: option.keyPath]) {
                                 HStack(spacing: 6) {
                                     Image(systemName: option.symbol)
@@ -90,13 +91,14 @@ private struct SettingsPanel: View {
                                 .font(.callout)
                             }
                             .controlSize(.small)
+                            .disabled(isScanning)
                         }
                     } else {
                         Button(action: togglePostProcessing) {
                             PostProcessingSummary(settings: model.settings)
                         }
                         .buttonStyle(.plain)
-                        .accessibilityHint("Zeigt die einzelnen Optionen")
+                        .accessibilityHint("Öffnet die Liste der Optionen")
                     }
                 } header: {
                     Button(action: togglePostProcessing) {
@@ -112,12 +114,13 @@ private struct SettingsPanel: View {
                         .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
+                    .accessibilityAddTraits(.isHeader)
                     .accessibilityValue(postProcessingExpanded.wrappedValue ? "Ausgeklappt" : "Eingeklappt")
-                    .accessibilityHint(postProcessingExpanded.wrappedValue ? "Blendet die Optionen aus" : "Zeigt die einzelnen Optionen")
+                    .accessibilityHint(postProcessingExpanded.wrappedValue ? "Blendet die Optionen aus" : "Zeigt die Optionen")
                 }
             }
+            // Gesperrt werden nur die Einstellungen; Auf- und Zuklappen geht auch während des Scans.
             .formStyle(.grouped)
-            .disabled(model.activity == .scanning)
 
             Divider()
             VStack(spacing: 6) {
@@ -131,6 +134,8 @@ private struct SettingsPanel: View {
             .padding(16)
         }
     }
+
+    private var isScanning: Bool { model.activity == .scanning }
 
     private func togglePostProcessing() {
         withAnimation(.easeInOut(duration: 0.2)) {
@@ -182,23 +187,26 @@ private struct PostProcessingSummary: View {
     let settings: ScanSettings
 
     var body: some View {
+        let active = settings.activePostProcessingCount
         HStack(spacing: 9) {
-            ForEach(ScanSettings.postProcessingOptions, id: \.title) { option in
+            ForEach(ScanSettings.postProcessingOptions) { option in
                 let isOn = settings[keyPath: option.keyPath]
                 Image(systemName: option.symbol)
                     .foregroundStyle(isOn ? .secondary : .tertiary)
-                    .help("\(option.title): \(isOn ? "an" : "aus")")
+                    .help("\(option.title): \(Self.state(isOn))")
             }
             Spacer(minLength: 4)
-            Text("\(settings.activePostProcessingCount) an")
+            Text("\(active) \(Self.state(true))")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
         .imageScale(.small)
         .contentShape(Rectangle())
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Nachbearbeitung: \(settings.activePostProcessingCount) von \(ScanSettings.postProcessingOptions.count) Optionen an")
+        .accessibilityLabel("Nachbearbeitung: \(active) von \(ScanSettings.postProcessingOptions.count) Optionen \(Self.state(true))")
     }
+
+    private static func state(_ isOn: Bool) -> String { isOn ? "an" : "aus" }
 }
 
 private struct ScannerCard: View {

@@ -88,16 +88,25 @@ struct ScanSettings: Codable, Equatable {
 
     static let resolutions = [150, 200, 300, 600]
 
-    /// Die Schalter im aufklappbaren Bereich „Nachbearbeitung & PDF“.
-    /// Reihenfolge: Bild, Einzug, PDF. Die Symbole sind SF Symbols.
-    static let postProcessingOptions: [(title: String, symbol: String, keyPath: WritableKeyPath<ScanSettings, Bool>)] = [
-        ("Leere Seiten entfernen", "rectangle.portrait.slash", \.skipBlankPages),
-        ("Schräglage korrigieren", "skew", \.deskew),
-        ("Hintergrund aufhellen", "sun.max", \.lightenBackground),
-        ("Doppeleinzug erkennen", "doc.on.doc", \.detectMultifeed),
-        ("Scan-Taste am Gerät", "button.programmable", \.scannerButton),
-        ("Texterkennung (OCR)", "text.viewfinder", \.ocr),
-        ("Dateiname vorschlagen", "sparkles", \.suggestFilename),
+    struct PostProcessingOption: Identifiable {
+        let title: String
+        /// Name eines SF Symbols.
+        let symbol: String
+        let keyPath: WritableKeyPath<ScanSettings, Bool>
+        /// Die Identität hängt an der Einstellung, nicht am angezeigten Text.
+        var id: AnyKeyPath { keyPath }
+    }
+
+    /// Die Schalter im Bereich „Nachbearbeitung“, Reihenfolge Bild, Einzug, PDF.
+    /// Die Zeilen und die Symbolleiste im zugeklappten Zustand lesen beide diese Tabelle.
+    static let postProcessingOptions: [PostProcessingOption] = [
+        .init(title: "Leere Seiten entfernen", symbol: "rectangle.portrait.slash", keyPath: \.skipBlankPages),
+        .init(title: "Schräglage korrigieren", symbol: "skew", keyPath: \.deskew),
+        .init(title: "Hintergrund aufhellen", symbol: "sun.max", keyPath: \.lightenBackground),
+        .init(title: "Doppeleinzug erkennen", symbol: "doc.on.doc", keyPath: \.detectMultifeed),
+        .init(title: "Scan-Taste am Gerät", symbol: "button.programmable", keyPath: \.scannerButton),
+        .init(title: "Texterkennung (OCR)", symbol: "text.viewfinder", keyPath: \.ocr),
+        .init(title: "Dateiname vorschlagen", symbol: "sparkles", keyPath: \.suggestFilename),
     ]
     var activePostProcessingCount: Int {
         Self.postProcessingOptions.filter { self[keyPath: $0.keyPath] }.count
