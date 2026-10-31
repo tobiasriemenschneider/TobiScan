@@ -58,6 +58,11 @@ struct TobiScanApp: App {
                     .keyboardShortcut("s")
                     .disabled(!model.canSave)
             }
+            CommandGroup(after: .toolbar) {
+                Divider()
+                Toggle("Virtuelles Testgerät anzeigen", isOn: $model.settings.showTestDevice)
+                    .disabled(model.isBusy)
+            }
         }
     }
 }

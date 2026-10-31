@@ -11,6 +11,15 @@ enum ColorMode: String, Codable, CaseIterable, Identifiable {
         case .blackWhite: return "Schwarzweiß"
         }
     }
+
+    /// Kurzform für den Segment-Umschalter in der Seitenleiste.
+    var shortTitle: String {
+        switch self {
+        case .color: return "Farbe"
+        case .gray: return "Grau"
+        case .blackWhite: return "S/W"
+        }
+    }
 }
 
 enum PaperSize: String, Codable, CaseIterable, Identifiable {
@@ -78,6 +87,14 @@ struct ScanSettings: Codable, Equatable {
     }
 
     static let resolutions = [150, 200, 300, 600]
+
+    /// Die Schalter im aufklappbaren Bereich „Nachbearbeitung & PDF“.
+    static let postProcessingOptions: [KeyPath<ScanSettings, Bool>] = [
+        \.skipBlankPages, \.deskew, \.lightenBackground, \.detectMultifeed, \.scannerButton, \.ocr, \.suggestFilename,
+    ]
+    var activePostProcessingCount: Int {
+        Self.postProcessingOptions.filter { self[keyPath: $0] }.count
+    }
     private static let defaultsKey = "scanSettings"
 
     static func load() -> ScanSettings {

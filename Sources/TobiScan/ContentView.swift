@@ -40,44 +40,31 @@ struct ContentView: View {
 
 private struct SettingsPanel: View {
     @EnvironmentObject private var model: AppModel
+    // Als Typ statt `@AppStorage`, aus demselben Grund wie bei `PageCell.hovering`.
+    private let postProcessingExpanded = AppStorage(wrappedValue: false, "sidebarPostProcessingExpanded")
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             Form {
                 Section("Scanner") {
-                    HStack {
-                        Picker("Scanner", selection: $model.selectedDeviceID) {
-                            if model.devices.isEmpty {
-                                Text("Kein Scanner").tag(String?.none)
-                            }
-                            ForEach(model.devices) { device in
-                                Text(device.displayName).tag(String?.some(device.id))
-                            }
-                        }
-                        .labelsHidden()
-                        Button {
-                            Task { await model.refreshDevices() }
-                        } label: {
-                            Image(systemName: "arrow.clockwise")
-                        }
-                        .help("Scanner neu suchen")
-                        .disabled(model.isBusy)
-                    }
-                    if let hint = deviceHint {
-                        Text(hint)
-                            .font(.callout)
-                            .foregroundStyle(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
+                    ScannerCard(hint: deviceHint)
                 }
 
                 Section("Scan") {
-                    Picker("Seiten", selection: $model.settings.duplex) {
-                        Text("Einseitig").tag(false)
-                        Text("Beidseitig").tag(true)
+                    segmentedRow("Seiten") {
+                        Picker("Seiten", selection: $model.settings.duplex) {
+                            Text("Einseitig").tag(false)
+                            Text("Beidseitig").tag(true)
+                        }
                     }
-                    Picker("Farbe", selection: $model.settings.colorMode) {
-                        ForEach(ColorMode.allCases) { Text($0.title).tag($0) }
+                    segmentedRow("Farbe") {
+                        Picker("Farbe", selection: $model.settings.colorMode) {
+                            ForEach(ColorMode.allCases) { mode in
+                                Text(mode.shortTitle)
+                                    .accessibilityLabel(mode.title)
+                                    .tag(mode)
+                            }
+                        }
                     }
                     Picker("Auflösung", selection: $model.settings.resolution) {
                         ForEach(ScanSettings.resolutions, id: \.self) { Text("\($0) dpi").tag($0) }
@@ -85,29 +72,50 @@ private struct SettingsPanel: View {
                     Picker("Papier", selection: $model.settings.paper) {
                         ForEach(PaperSize.allCases) { Text($0.title).tag($0) }
                     }
-                    Toggle("Leere Seiten entfernen", isOn: $model.settings.skipBlankPages)
-                    Toggle("Schräglage korrigieren", isOn: $model.settings.deskew)
-                    Toggle("Hintergrund aufhellen", isOn: $model.settings.lightenBackground)
-                    Toggle("Doppeleinzug erkennen", isOn: $model.settings.detectMultifeed)
-                    Toggle("Scan-Taste am Gerät", isOn: $model.settings.scannerButton)
-                }
-
-                Section("PDF") {
-                    Toggle("Durchsuchbar (Texterkennung)", isOn: $model.settings.ocr)
-                    Toggle("Dateinamen vorschlagen (KI)", isOn: $model.settings.suggestFilename)
                 }
 
                 Section {
-                    Toggle("Virtuelles Testgerät anzeigen", isOn: $model.settings.showTestDevice)
+                    DisclosureGroup(isExpanded: postProcessingExpanded.projectedValue) {
+                        Toggle("Leere Seiten entfernen", isOn: $model.settings.skipBlankPages)
+                        Toggle("Schräglage korrigieren", isOn: $model.settings.deskew)
+                        Toggle("Hintergrund aufhellen", isOn: $model.settings.lightenBackground)
+                        Toggle("Doppeleinzug erkennen", isOn: $model.settings.detectMultifeed)
+                        Toggle("Scan-Taste am Gerät", isOn: $model.settings.scannerButton)
+                        Toggle("Durchsuchbar (Texterkennung)", isOn: $model.settings.ocr)
+                        Toggle("Dateinamen vorschlagen (KI)", isOn: $model.settings.suggestFilename)
+                    } label: {
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text("Nachbearbeitung & PDF")
+                            Text("\(model.settings.activePostProcessingCount) von \(ScanSettings.postProcessingOptions.count) Optionen aktiv")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
                 }
             }
             .formStyle(.grouped)
             .disabled(model.activity == .scanning)
 
             Divider()
-            scanButton
-                .padding(16)
+            VStack(spacing: 6) {
+                scanButton
+                Text(scanHint)
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+            }
+            .padding(16)
         }
+    }
+
+    private func segmentedRow<Content: View>(_ title: String, @ViewBuilder picker: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title)
+            picker()
+                .labelsHidden()
+                .pickerStyle(.segmented)
+                .fixedSize()
+        }
+        .padding(.vertical, 2)
     }
 
     @ViewBuilder private var scanButton: some View {
@@ -132,6 +140,11 @@ private struct SettingsPanel: View {
         }
     }
 
+    /// Die Scan-Taste am Gerät funktioniert nur bei WLAN-Scannern (siehe `AppModel.updateStandby`).
+    private var scanHint: String {
+        model.settings.scannerButton && model.selectedDevice?.isWifi == true ? "⌘R · oder Scan-Taste am Gerät" : "⌘R"
+    }
+
     private var deviceHint: String? {
         guard model.devices.isEmpty, model.activity != .searching else { return nil }
         if model.toolMissing {
@@ -141,6 +154,116 @@ private struct SettingsPanel: View {
             return "ScanSnap Home läuft noch und blockiert den Scanner. Bitte ganz beenden (auch das Symbol in der Menüleiste) und neu suchen."
         }
         return "Den iX500 einschalten (Klappe öffnen), ins WLAN bringen oder per USB anschließen und neu suchen."
+    }
+}
+
+private struct ScannerCard: View {
+    @EnvironmentObject private var model: AppModel
+    let hint: String?
+
+    private var device: ScanDevice? { model.selectedDevice }
+    private var searching: Bool { model.activity == .searching }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 10) {
+                Image(systemName: "scanner")
+                    .font(.system(size: 17))
+                    .foregroundStyle(device == nil ? Color.secondary : Color.primary)
+                    .frame(width: 34, height: 34)
+                    .background(.quaternary, in: RoundedRectangle(cornerRadius: 8))
+                    .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title)
+                        .fontWeight(.semibold)
+                        .foregroundStyle(device == nil ? .secondary : .primary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                        .help(device?.displayName ?? "")
+                    HStack(spacing: 5) {
+                        if searching {
+                            ProgressView().controlSize(.mini)
+                        } else {
+                            Circle()
+                                .fill(device == nil ? Color.secondary.opacity(0.5) : Color.green)
+                                .frame(width: 7, height: 7)
+                                .accessibilityHidden(true)
+                        }
+                        Text(subtitle)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .accessibilityElement(children: .combine)
+                Spacer(minLength: 0)
+                if hint == nil {
+                    Button {
+                        Task { await model.refreshDevices() }
+                    } label: {
+                        Image(systemName: "arrow.clockwise")
+                    }
+                    .buttonStyle(.borderless)
+                    .help("Scanner neu suchen")
+                    .accessibilityLabel("Scanner neu suchen")
+                    .disabled(model.isBusy)
+                }
+            }
+
+            if model.devices.count > 1 {
+                Picker("Scanner", selection: $model.selectedDeviceID) {
+                    ForEach(model.devices) { device in
+                        Text(device.displayName).tag(String?.some(device.id))
+                    }
+                }
+                .labelsHidden()
+                .disabled(model.isBusy)
+            }
+
+            if let hint {
+                Text(hint)
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Button {
+                    Task { await model.refreshDevices() }
+                } label: {
+                    Label("Neu suchen", systemImage: "arrow.clockwise")
+                        .frame(maxWidth: .infinity)
+                }
+                .disabled(model.isBusy)
+            }
+        }
+        .padding(.vertical, 2)
+    }
+
+    private var title: String {
+        if let device { return device.shortName }
+        return searching ? "Suche Scanner …" : "Kein Scanner"
+    }
+
+    private var subtitle: String {
+        guard let device else { return searching ? "WLAN und USB" : "Nicht gefunden" }
+        let state: String
+        switch model.activity {
+        case .scanning: state = "Scannt …"
+        case .searching: state = "Suche …"
+        default: state = "Bereit"
+        }
+        return "\(device.connection) · \(state)"
+    }
+}
+
+private extension ScanDevice {
+    var isTestDevice: Bool { id.hasPrefix("test:") }
+
+    /// Name ohne den Zusatz „(WLAN)“, den die Verbindungszeile schon zeigt.
+    var shortName: String {
+        isWifi ? displayName.replacingOccurrences(of: " (WLAN)", with: "") : displayName
+    }
+
+    var connection: String {
+        if isTestDevice { return "Testgerät" }
+        return isWifi ? "WLAN" : "USB"
     }
 }
 
