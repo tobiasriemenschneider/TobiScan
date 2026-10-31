@@ -75,18 +75,45 @@ private struct SettingsPanel: View {
                 }
 
                 Section {
-                    DisclosureGroup(isExpanded: postProcessingExpanded.projectedValue) {
+                    if postProcessingExpanded.wrappedValue {
                         ForEach(ScanSettings.postProcessingOptions, id: \.title) { option in
-                            Toggle(option.title, isOn: $model.settings[dynamicMember: option.keyPath])
+                            Toggle(isOn: $model.settings[dynamicMember: option.keyPath]) {
+                                HStack(spacing: 6) {
+                                    Image(systemName: option.symbol)
+                                        .foregroundStyle(.secondary)
+                                        .frame(width: 16)
+                                        .accessibilityHidden(true)
+                                    Text(option.title)
+                                        .lineLimit(1)
+                                        .minimumScaleFactor(0.9)
+                                }
+                                .font(.callout)
+                            }
+                            .controlSize(.small)
                         }
-                    } label: {
-                        VStack(alignment: .leading, spacing: 1) {
-                            Text("Nachbearbeitung & PDF")
-                            Text("\(model.settings.activePostProcessingCount) von \(ScanSettings.postProcessingOptions.count) Optionen aktiv")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
+                    } else {
+                        Button(action: togglePostProcessing) {
+                            PostProcessingSummary(settings: model.settings)
                         }
+                        .buttonStyle(.plain)
+                        .accessibilityHint("Zeigt die einzelnen Optionen")
                     }
+                } header: {
+                    Button(action: togglePostProcessing) {
+                        HStack {
+                            Text("Nachbearbeitung")
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(.tertiary)
+                                .rotationEffect(.degrees(postProcessingExpanded.wrappedValue ? 90 : 0))
+                                .accessibilityHidden(true)
+                        }
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityValue(postProcessingExpanded.wrappedValue ? "Ausgeklappt" : "Eingeklappt")
+                    .accessibilityHint(postProcessingExpanded.wrappedValue ? "Blendet die Optionen aus" : "Zeigt die einzelnen Optionen")
                 }
             }
             .formStyle(.grouped)
@@ -102,6 +129,12 @@ private struct SettingsPanel: View {
                 }
             }
             .padding(16)
+        }
+    }
+
+    private func togglePostProcessing() {
+        withAnimation(.easeInOut(duration: 0.2)) {
+            postProcessingExpanded.wrappedValue.toggle()
         }
     }
 
@@ -141,6 +174,30 @@ private struct SettingsPanel: View {
     /// Die Scan-Taste am Gerät funktioniert nur bei WLAN-Scannern (siehe `AppModel.updateStandby`).
     private var scanHint: String {
         model.settings.scannerButton && model.selectedDevice?.isWifi == true ? "⌘R · oder Scan-Taste am Gerät" : "⌘R"
+    }
+}
+
+/// Zugeklappter Zustand: welche Optionen an sind, als Symbolleiste.
+private struct PostProcessingSummary: View {
+    let settings: ScanSettings
+
+    var body: some View {
+        HStack(spacing: 9) {
+            ForEach(ScanSettings.postProcessingOptions, id: \.title) { option in
+                let isOn = settings[keyPath: option.keyPath]
+                Image(systemName: option.symbol)
+                    .foregroundStyle(isOn ? .secondary : .tertiary)
+                    .help("\(option.title): \(isOn ? "an" : "aus")")
+            }
+            Spacer(minLength: 4)
+            Text("\(settings.activePostProcessingCount) an")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .imageScale(.small)
+        .contentShape(Rectangle())
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Nachbearbeitung: \(settings.activePostProcessingCount) von \(ScanSettings.postProcessingOptions.count) Optionen an")
     }
 }
 

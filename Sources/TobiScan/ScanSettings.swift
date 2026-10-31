@@ -89,14 +89,15 @@ struct ScanSettings: Codable, Equatable {
     static let resolutions = [150, 200, 300, 600]
 
     /// Die Schalter im aufklappbaren Bereich „Nachbearbeitung & PDF“.
-    static let postProcessingOptions: [(title: String, keyPath: WritableKeyPath<ScanSettings, Bool>)] = [
-        ("Leere Seiten entfernen", \.skipBlankPages),
-        ("Schräglage korrigieren", \.deskew),
-        ("Hintergrund aufhellen", \.lightenBackground),
-        ("Doppeleinzug erkennen", \.detectMultifeed),
-        ("Scan-Taste am Gerät", \.scannerButton),
-        ("Durchsuchbar (Texterkennung)", \.ocr),
-        ("Dateinamen vorschlagen (KI)", \.suggestFilename),
+    /// Reihenfolge: Bild, Einzug, PDF. Die Symbole sind SF Symbols.
+    static let postProcessingOptions: [(title: String, symbol: String, keyPath: WritableKeyPath<ScanSettings, Bool>)] = [
+        ("Leere Seiten entfernen", "rectangle.portrait.slash", \.skipBlankPages),
+        ("Schräglage korrigieren", "skew", \.deskew),
+        ("Hintergrund aufhellen", "sun.max", \.lightenBackground),
+        ("Doppeleinzug erkennen", "doc.on.doc", \.detectMultifeed),
+        ("Scan-Taste am Gerät", "button.programmable", \.scannerButton),
+        ("Texterkennung (OCR)", "text.viewfinder", \.ocr),
+        ("Dateiname vorschlagen", "sparkles", \.suggestFilename),
     ]
     var activePostProcessingCount: Int {
         Self.postProcessingOptions.filter { self[keyPath: $0.keyPath] }.count
